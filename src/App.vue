@@ -104,7 +104,15 @@ export default {
       isSame: false,
     };
   },
-  
+  created() {
+    const tickerData = localStorage.getItem('cryptonomicon-list');
+    if (tickerData) {
+      this.tickers = JSON.parse(tickerData)
+      this.tickers.forEach(ticker => {
+        this.subscribeToUpdate(ticker.name)
+      })
+    }
+  },
   computed: {
     filteredCoins() {
       return this.coinList.map(a => a.Symbol).filter(a => a.toLowerCase().includes(this.ticker.toLowerCase())).slice(0, 4)
@@ -130,27 +138,30 @@ export default {
         this.isSame = true
       }
     },
+    subscribeToUpdate(tickerName) {
+      this.intervals[this.ticker] = setInterval(async () => {
+        const f = await fetch(
+          `https://min-api.cryptocompare.com/data/price?fsym=${tickerName}&tsyms=USD&api_key=bae8a91f5edbb1f0654033308579e016345fc9530a5cf87d9b85a09f8544cf63`
+        );
+        const data = await f.json();
 
+        this.tickers.find(t => t.name === tickerName).price =
+          data.USD > 1 ? data.USD.toFixed(2) : data.USD.toPrecision(2);
+        if (this.sel?.name === tickerName) {
+          //this.sel?.name === [ this.sel && this.sel.name ]
+          this.graph.push(data.USD);
+        }
+      }, 5000);
+      this.ticker = "";
+    },
     add() {
       const currentTicker = {
         name: this.ticker,
         price: "-",
       };
       this.tickers.push(currentTicker);
-      this.intervals[this.ticker] = setInterval(async () => {
-        const f = await fetch(
-          `https://min-api.cryptocompare.com/data/price?fsym=${currentTicker.name}&tsyms=USD&api_key=bae8a91f5edbb1f0654033308579e016345fc9530a5cf87d9b85a09f8544cf63`
-        );
-        const data = await f.json();
-
-        this.tickers.find(t => t.name === currentTicker.name).price =
-          data.USD > 1 ? data.USD.toFixed(2) : data.USD.toPrecision(2);
-        if (this.sel?.name === currentTicker.name) {
-          //this.sel?.name === [ this.sel && this.sel.name ]
-          this.graph.push(data.USD);
-        }
-      }, 5000);
-      this.ticker = "";
+      localStorage.setItem('cryptonomicon-list', JSON.stringify(this.tickers));
+      this.subscribeToUpdate(currentTicker.name);
     },
 
     select(ticker) {
