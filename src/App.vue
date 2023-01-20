@@ -16,25 +16,13 @@
                 class="block w-full pr-10 border-gray-300 text-gray-900 focus:outline-none focus:ring-gray-500 focus:border-gray-500 sm:text-sm rounded-md"
                 placeholder="Например DOGE" />
             </div>
-            <div class="flex bg-white shadow-md p-1 rounded-md shadow-md flex-wrap">
-              <span
+            <div class="flex bg-white p-1 rounded-md shadow-md flex-wrap">
+              <span v-for="(coin, idx) in filteredCoins" @click="addCoin(coin)" :key="idx"
                 class="inline-flex items-center px-2 m-1 rounded-md text-xs font-medium bg-gray-300 text-gray-800 cursor-pointer">
-                BTC
-              </span>
-              <span
-                class="inline-flex items-center px-2 m-1 rounded-md text-xs font-medium bg-gray-300 text-gray-800 cursor-pointer">
-                DOGE
-              </span>
-              <span
-                class="inline-flex items-center px-2 m-1 rounded-md text-xs font-medium bg-gray-300 text-gray-800 cursor-pointer">
-                BCH
-              </span>
-              <span
-                class="inline-flex items-center px-2 m-1 rounded-md text-xs font-medium bg-gray-300 text-gray-800 cursor-pointer">
-                CHD
+                {{ coin }}
               </span>
             </div>
-            <div class="text-sm text-red-600">Такой тикер уже добавлен</div>
+            <div v-if="isSame" class="text-sm text-red-600">Такой тикер уже добавлен</div>
           </div>
         </div>
         <button @click="add" type="button"
@@ -53,11 +41,11 @@
         <hr class="w-full border-t border-gray-600 my-4" />
         <dl class="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-3">
           <div v-for="t in tickers" :key="t.name" @click="select(t)" :class="{
-            'border-4': sel === t
+            'border-4': sel === t,
           }" class="bg-white overflow-hidden shadow rounded-lg border-purple-800 border-solid cursor-pointer">
             <div class="px-4 py-5 sm:p-6 text-center">
               <dt class="text-sm font-medium text-gray-500 truncate">
-                {{ t.name }} - USD
+                {{ t.name.toUpperCase() }} - USD
               </dt>
               <dd class="mt-1 text-3xl font-semibold text-gray-900">
                 {{ t.price }}
@@ -79,7 +67,7 @@
       </template>
       <section v-if="sel" class="relative">
         <h3 class="text-lg leading-6 font-medium text-gray-900 my-8">
-          {{ sel.name }} - USD
+          {{ sel.name.toUpperCase() }} - USD
         </h3>
         <div class="flex items-end border-gray-600 border-b border-l h-64">
           <div v-for="(bar, idx) in normalizeGraph()" :key="idx" :style="{ height: `${bar}%` }"
@@ -107,53 +95,81 @@ export default {
 
   data() {
     return {
-      ticker: '',
+      ticker: "",
       tickers: [],
       sel: null,
       graph: [],
+      coinList: [],
+      intervals: {},
+      isSame: false,
     };
   },
+  
+  computed: {
+    filteredCoins() {
+      return this.coinList.map(a => a.Symbol).filter(a => a.toLowerCase().includes(this.ticker.toLowerCase())).slice(0, 4)
+    },
+  },
+  mounted() {
+    this.getCoins()
+  },
   methods: {
+    async getCoins() {
+      const f = await fetch('https://min-api.cryptocompare.com/data/all/coinlist?summary=true')
+      const data = await f.json()
+      this.coinList = Object.values(data.Data)
+    },
+
+    addCoin(coin) {
+      if (!this.tickers.some(a => a.name.toLowerCase() === coin.toLowerCase())) {
+        this.isSame = false
+        this.ticker = coin;
+        this.add();
+        this.ticker = ''
+      } else {
+        this.isSame = true
+      }
+    },
+
     add() {
       const currentTicker = {
         name: this.ticker,
         price: "-",
       };
-
       this.tickers.push(currentTicker);
-
-      setInterval(async () => {
+      this.intervals[this.ticker] = setInterval(async () => {
         const f = await fetch(
           `https://min-api.cryptocompare.com/data/price?fsym=${currentTicker.name}&tsyms=USD&api_key=bae8a91f5edbb1f0654033308579e016345fc9530a5cf87d9b85a09f8544cf63`
         );
-
         const data = await f.json();
-        
-        this.tickers.find(t => t.name === currentTicker.name).price = data.USD > 1 ? data.USD.toFixed(2) : data.USD.toPrecision(2);
-        if (this.sel.name === currentTicker.name) {
-          this.graph.push(data.USD)
-        }
-      }, 3000)
 
-      this.ticker = '';
+        this.tickers.find(t => t.name === currentTicker.name).price =
+          data.USD > 1 ? data.USD.toFixed(2) : data.USD.toPrecision(2);
+        if (this.sel?.name === currentTicker.name) {
+          //this.sel?.name === [ this.sel && this.sel.name ]
+          this.graph.push(data.USD);
+        }
+      }, 5000);
+      this.ticker = "";
     },
 
     select(ticker) {
-      this.sel = ticker
+      this.sel = ticker;
       this.graph = [];
     },
 
     handleDelete(tickerToRemove) {
-      this.tickers = this.tickers.filter((t) => t !== tickerToRemove);
+      this.tickers = this.tickers.filter(t => t !== tickerToRemove);
+      clearInterval(this.intervals[tickerToRemove.name])
     },
 
     normalizeGraph() {
       const maxValue = Math.max(...this.graph);
       const minValue = Math.min(...this.graph);
       return this.graph.map(
-        price => 5 + ((price - minValue) * 95) / (maxValue - minValue)
+        (price) => 5 + ((price - minValue) * 95) / (maxValue - minValue)
       );
-    }
+    },
   },
 };
 </script>
